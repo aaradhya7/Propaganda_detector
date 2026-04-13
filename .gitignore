@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+backend/propaganda_deberta_7class/model.safetensors
+*.safetensors
