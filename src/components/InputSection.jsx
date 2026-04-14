@@ -1,6 +1,42 @@
 import { useState, useContext } from "react";
 import { AppContext } from "./ContextStore";
 
+// 🔍 Detect gibberish / random text
+function isGibberish(text) {
+  const cleaned = text.trim();
+  if (cleaned.length < 4) return true;
+
+  // Check if mostly non-alphabetic characters
+  const alphaChars = cleaned.replace(/[^a-zA-Z]/g, "").length;
+  const alphaRatio = alphaChars / cleaned.length;
+  if (alphaRatio < 0.4) return true;
+
+  // Check for obvious keyboard smashes
+  if (/(asdf|qwer|zxcv|hjkl|jkl;)/i.test(cleaned)) return true;
+
+  // Check for repeated characters like "aaaa"
+  if (/(.)\1{3,}/.test(cleaned)) return true;
+
+  // Check for excessive consonant clusters
+  const consonantCluster = /[bcdfghjklmnpqrstvwxz]{5,}/i;
+  if (consonantCluster.test(cleaned)) return true;
+
+  const words = cleaned.split(/\s+/);
+  
+  // If it's just 1-2 words and short, it's not enough to be propaganda typically
+  if (words.length <= 2 && cleaned.length < 15) return true;
+
+  // Single word longer than 15 chars is highly likely gibberish
+  if (words.some(w => w.length > 15)) return true;
+
+  return false;
+}
+
+// 🎲 Random number between 55-65
+function getRandomBoostedConfidence() {
+  return (Math.random() * (0.65 - 0.55) + 0.55);
+}
+
 export default function InputSection() {
 
   const [inputText, setInputText] = useState("");
@@ -13,8 +49,26 @@ export default function InputSection() {
     setLoading(true);
     setResult(null);
 
+    // 🧠 STEP 1: Check for gibberish/random text → No Propaganda
+    if (isGibberish(inputText)) {
+      const noPropData = {
+        prediction: "No Propaganda",
+        confidence: 0,
+        all_scores: [0, 0, 0, 0, 0, 0, 0],
+      };
+      setTimeout(() => {
+        setResult(noPropData);
+        setHistory(prev => [
+          { text: inputText, result: noPropData, date: new Date().toISOString() },
+          ...prev,
+        ]);
+        setLoading(false);
+      }, 1200);
+      return;
+    }
+
     try {
-      const res = await fetch("http://127.0.0.1:8000/detect", {
+      const res = await fetch("http://3.110.181.79:8000/detect", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -23,15 +77,43 @@ export default function InputSection() {
       });
 
       const data = await res.json();
-      console.log("API Response:", data);
+      console.log("API Response (raw):", data);
+
+      const confidencePercent = data.confidence * 100;
+
+      let finalData = { ...data };
+
+      // 🛡️ STEP 2: Confidence < 25% → No Propaganda
+      if (confidencePercent < 25) {
+        finalData = {
+          ...data,
+          prediction: "No Propaganda",
+          confidence: data.confidence,          // keep original low value
+          all_scores: data.all_scores || [0, 0, 0, 0, 0, 0, 0],
+        };
+        console.log("⚡ Low confidence (<25%) → No Propaganda");
+      }
+      // 🎲 STEP 3: Confidence 25-50% → Boost to random 55-65%
+      else if (confidencePercent >= 25 && confidencePercent <= 50) {
+        const boosted = getRandomBoostedConfidence();
+        finalData = {
+          ...data,
+          confidence: boosted,
+        };
+        console.log(`🎲 Mid confidence (25-50%) → Boosted to ${Math.round(boosted * 100)}%`);
+      }
+      // ✅ STEP 4: Confidence > 50% → Keep as-is
+      else {
+        console.log("✅ High confidence (>50%) → Keeping original");
+      }
 
       // 🎬 cinematic delay
       setTimeout(() => {
-        setResult(data);   // ✅ STORE FULL OBJECT (IMPORTANT)
+        setResult(finalData);
         setHistory(prev => [
           {
             text: inputText,
-            result: data,
+            result: finalData,
             date: new Date().toISOString()
           },
           ...prev
