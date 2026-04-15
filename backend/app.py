@@ -1,9 +1,13 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 from fastapi.middleware.cors import CORSMiddleware
 import torch.nn.functional as F
+import os
+from pathlib import Path
 
 
 
@@ -55,3 +59,31 @@ def detect(data: TextInput):
         "confidence": confidence,
         "all_scores": probs.tolist()[0]
     }
+
+
+# 📌 Serve frontend from dist folder
+DIST_DIR = Path(__file__).parent.parent / "dist"
+
+# Mount static files
+if DIST_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=DIST_DIR / "assets"), name="static")
+    
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """Serve React SPA - return index.html for all non-API routes"""
+        file_path = DIST_DIR / full_path
+        
+        # If it's a file that exists, serve it
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(file_path)
+        
+        # Otherwise serve index.html for client-side routing
+        index_html = DIST_DIR / "index.html"
+        if index_html.exists():
+            return FileResponse(index_html)
+        
+        return {"error": "Frontend not built. Run 'npm run build' in project root"}
+else:
+    @app.get("/")
+    async def root():
+        return {"message": "Frontend dist folder not found. Build the frontend first with 'npm run build'"}

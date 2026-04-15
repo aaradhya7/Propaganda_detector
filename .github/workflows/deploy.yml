@@ -1,0 +1,59 @@
+name: Deploy to AWS EC2
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Build Frontend
+      run: |
+        npm install
+        npm run build
+        echo "Frontend built successfully"
+    
+    - name: Deploy to EC2
+      uses: appleboy/ssh-action@master
+      with:
+        host: 13.235.248.64
+        username: ec2-user
+        key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        script: |
+          cd ~/propaganda-detector
+          
+          # Pull latest code
+          git pull origin main
+          
+          # Update environment
+          export PATH=/home/ec2-user/.nvm/versions/node/*/bin:$PATH
+          
+          # Update dependencies and build
+          npm install
+          npm run build
+          
+          # Update backend dependencies
+          cd backend
+          source venv/bin/activate
+          pip install -r requirements.txt -q
+          cd ..
+          
+          # Restart services
+          pm2 restart all
+          pm2 save
+          
+          echo "Deployment Complete!"
+          pm2 status
+
+    - name: Notify on Success
+      if: success()
+      run: echo "✅ Deployment to EC2 (13.235.248.64) completed successfully!"
+    
+    - name: Notify on Failure
+      if: failure()
+      run: echo "❌ Deployment failed. Check logs above."

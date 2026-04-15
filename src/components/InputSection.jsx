@@ -68,7 +68,8 @@ export default function InputSection() {
     }
 
     try {
-      const res = await fetch("http://3.110.181.79:8000/detect", {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://13.235.248.64:8000';
+      const res = await fetch(`${apiUrl}/detect`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
